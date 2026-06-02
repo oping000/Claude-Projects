@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Amazon Review Sentiment Pipeline</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f3; color: #1a1a1a; min-height: 100vh; padding: 2rem; }
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .subtitle { font-size: 14px; color: #666; margin-bottom: 2rem; }
+  .card { background: white; border-radius: 12px; border: 1px solid #e5e5e5; padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
+  .card-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: #888; margin-bottom: .75rem; }
+  .api-row { display: flex; gap: 10px; align-items: center; }
+  input[type="password"], input[type="text"] { flex: 1; padding: 9px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; font-family: inherit; }
+  input:focus { outline: none; border-color: #378ADD; }
+  .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 1rem; }
+  .metric { background: #f8f8f6; border-radius: 8px; padding: 14px 16px; }
+  .metric-label { font-size: 12px; color: #888; margin-bottom: 4px; }
+  .metric-value { font-size: 22px; font-weight: 600; color: #1a1a1a; }
+  .metric-sub { font-size: 11px; color: #aaa; margin-top: 2px; }
+  .tabs { display: flex; border-bottom: 1px solid #eee; margin-bottom: 1.25rem; flex-wrap: wrap; }
+  .tab { padding: 8px 18px; font-size: 13px; cursor: pointer; color: #888; background: none; border: none; border-bottom: 2px solid transparent; font-family: inherit; transition: all .15s; }
+  .tab.active { color: #1a1a1a; border-bottom-color: #1a1a1a; font-weight: 500; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  textarea { width: 100%; min-height: 100px; padding: 12px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; color: #1a1a1a; }
+  textarea:focus { outline: none; border-color: #378ADD; }
+  .btn-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+  button { padding: 9px 20px; font-size: 14px; cursor: pointer; border-radius: 8px; border: 1px solid #ddd; background: white; color: #1a1a1a; font-family: inherit; transition: background .15s; }
+  button:hover { background: #f5f5f3; }
+  button.primary { background: #1a1a1a; color: white; border-color: #1a1a1a; }
+  button.primary:hover { background: #333; }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  .status { font-size: 13px; color: #888; }
+  .result-card { border: 1px solid #eee; border-radius: 10px; padding: 14px 16px; margin-top: 12px; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; margin-right: 6px; margin-bottom: 4px; }
+  .badge-pos { background: #EAF3DE; color: #3B6D11; }
+  .badge-neg { background: #FCEBEB; color: #A32D2D; }
+  .badge-neu { background: #f1f1ee; color: #666; }
+  .badge-high { background: #FCEBEB; color: #A32D2D; }
+  .badge-med  { background: #FAEEDA; color: #854F0B; }
+  .badge-low  { background: #EAF3DE; color: #3B6D11; }
+  .badge-cat  { background: #f1f1ee; color: #666; }
+  .badge-stars { background: #FAEEDA; color: #854F0B; }
+  .badge-escalate { background: #FCEBEB; color: #A32D2D; }
+  .badge-safe { background: #EAF3DE; color: #3B6D11; }
+  .score-row { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+  .score-label { font-size: 12px; color: #888; min-width: 110px; }
+  .score-bar-wrap { flex: 1; height: 6px; background: #f1f1ee; border-radius: 3px; overflow: hidden; }
+  .score-bar { height: 100%; border-radius: 3px; transition: width .4s; }
+  .score-num { font-size: 14px; font-weight: 600; min-width: 36px; }
+  .summary-text { font-size: 13px; color: #666; margin-top: 8px; line-height: 1.5; }
+  .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  .chart-wrap { position: relative; width: 100%; height: 200px; }
+  .chart-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: #888; margin-bottom: .5rem; }
+  .history-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid #f1f1ee; font-size: 13px; }
+  .history-row:last-child { border-bottom: none; }
+  .history-text { flex: 1; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px; }
+  .history-time { font-size: 12px; color: #aaa; }
+  .empty-state { font-size: 13px; color: #aaa; padding: 1rem 0; }
+  .api-hint { font-size: 12px; color: #aaa; margin-top: 6px; }
+  .api-hint a { color: #378ADD; text-decoration: none; }
+  .pred-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 12px; }
+  .pred-box { border: 1px solid #eee; border-radius: 10px; padding: 14px 16px; }
+  .pred-box-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: #888; margin-bottom: 10px; }
+  .pred-big { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
+  .pred-sub { font-size: 12px; color: #888; margin-bottom: 8px; }
+  .prob-bar-wrap { height: 8px; background: #f1f1ee; border-radius: 4px; overflow: hidden; margin: 6px 0 4px; }
+  .prob-bar { height: 100%; border-radius: 4px; transition: width .5s; }
+  .prob-label { font-size: 11px; color: #aaa; }
+  .stars { color: #EF9F27; font-size: 18px; letter-spacing: 2px; }
+  .reasoning { font-size: 12px; color: #888; margin-top: 8px; line-height: 1.5; font-style: italic; }
+  .section-divider { border: none; border-top: 1px solid #f1f1ee; margin: 1rem 0; }
+</style>
+</head>
+<body>
+
+<h1>Amazon Review Sentiment Pipeline</h1>
+<p class="subtitle">Unstructured text → structured analysis + predictions, powered by Claude AI</p>
+
+<div class="card">
+  <p class="card-title">API key</p>
+  <div class="api-row">
+    <input type="password" id="api-key" placeholder="YOUR_ANTHROPIC_API_KEY_HERE..." />
+    <button onclick="toggleKey()">Show</button>
+  </div>
+  <p class="api-hint">Get your key at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> → API Keys. Stays in your browser only.</p>
+</div>
+
+<div class="metric-grid">
+  <div class="metric"><p class="metric-label">Reviews analyzed</p><p class="metric-value" id="m-total">0</p></div>
+  <div class="metric"><p class="metric-label">Avg sentiment score</p><p class="metric-value" id="m-avg">—</p><p class="metric-sub">out of 10</p></div>
+  <div class="metric"><p class="metric-label">Escalation risk</p><p class="metric-value" id="m-escalate">0</p><p class="metric-sub">high risk reviews</p></div>
+  <div class="metric"><p class="metric-label">Avg predicted rating</p><p class="metric-value" id="m-rating">—</p><p class="metric-sub">out of 5 stars</p></div>
+</div>
+
+<div class="card">
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('analyze')">Analyze review</button>
+    <button class="tab" onclick="switchTab('predict')">Predictions</button>
+    <button class="tab" onclick="switchTab('charts')">Charts</button>
+    <button class="tab" onclick="switchTab('history')">History</button>
+  </div>
+
+  <!-- ANALYZE TAB -->
+  <div class="tab-panel active" id="tab-analyze">
+    <textarea id="review-input" placeholder='Type or paste a review here, e.g. "Good service but sound quality was poor"'></textarea>
+    <div class="btn-row">
+      <button class="primary" id="run-btn" onclick="runAll()">&#10024; Analyze + Predict</button>
+      <button onclick="loadSample()">Load sample review</button>
+      <span class="status" id="status"></span>
+    </div>
+    <div id="result-area"></div>
+  </div>
+
+  <!-- PREDICTIONS TAB -->
+  <div class="tab-panel" id="tab-predict">
+    <textarea id="pred-input" placeholder='Type or paste a review to predict escalation risk and star rating, e.g. "Good service but sound quality was poor"'></textarea>
+    <div class="btn-row">
+      <button class="primary" id="pred-btn" onclick="runPredictions()">&#127919; Run Predictions</button>
+      <button onclick="loadPredSample()">Load sample review</button>
+      <span class="status" id="pred-status"></span>
+    </div>
+    <div id="pred-result"></div>
+  </div>
+
+  <!-- CHARTS TAB -->
+  <div class="tab-panel" id="tab-charts">
+    <div class="chart-grid">
+      <div>
+        <p class="chart-label">Sentiment distribution</p>
+        <div class="chart-wrap"><canvas id="chart-sentiment" role="img" aria-label="Sentiment donut chart">No data yet.</canvas></div>
+      </div>
+      <div>
+        <p class="chart-label">Escalation risk distribution</p>
+        <div class="chart-wrap"><canvas id="chart-escalate" role="img" aria-label="Escalation risk donut chart">No data yet.</canvas></div>
+      </div>
+    </div>
+    <div style="margin-top:1.5rem;">
+      <p class="chart-label">Predicted vs actual star rating</p>
+      <div style="position:relative;width:100%;height:200px;"><canvas id="chart-ratings" role="img" aria-label="Rating comparison bar chart">No data yet.</canvas></div>
+    </div>
+    <div style="margin-top:1.5rem;">
+      <p class="chart-label">Sentiment scores over time</p>
+      <div style="position:relative;width:100%;height:180px;"><canvas id="chart-scores" role="img" aria-label="Score line chart">No data yet.</canvas></div>
+    </div>
+  </div>
+
+  <!-- HISTORY TAB -->
+  <div class="tab-panel" id="tab-history">
+    <div id="history-list"><p class="empty-state">No reviews analyzed yet.</p></div>
+    <div style="margin-top:1rem;">
+      <button onclick="downloadCSV()">&#8595; Download CSV</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SAMPLES = [
+  "Good service but sound quality was poor. The headphones look great but bass is weak and vocals sound tinny. Returned after one week.",
+  "Absolutely love this cable! Charges super fast and feels very premium. Been using it 3 months with zero issues. Highly recommend.",
+  "Stopped working after 2 weeks. Contacted support and got no response. Total waste of money. I want a refund immediately.",
+  "Decent for the price. Nothing special but gets the job done. Build quality feels a bit cheap but works fine so far."
+];
+let sampleIdx = 0, predSampleIdx = 0, history = [];
+let sentChart, escalateChart, ratingsChart, scoresChart;
+
+function toggleKey() {
+  const inp = document.getElementById('api-key');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+
+function getKey() { return document.getElementById('api-key').value.trim(); }
+
+function switchTab(name) {
+  const names = ['analyze','predict','charts','history'];
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', names[i]===name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id==='tab-'+name));
+  if (name==='charts') renderCharts();
+}
+
+function loadSample() {
+  document.getElementById('review-input').value = SAMPLES[sampleIdx % SAMPLES.length];
+  sampleIdx++;
+}
+
+function loadPredSample() {
+  document.getElementById('pred-input').value = SAMPLES[predSampleIdx % SAMPLES.length];
+  predSampleIdx++;
+}
+
+async function callClaude(prompt) {
+  const key = getKey();
+  if (!key) throw new Error('Please enter your API key first.');
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 500, messages: [{ role: 'user', content: prompt }] })
+  });
+  const data = await resp.json();
+  if (data.error) throw new Error(data.error.message);
+  return data.content[0].text.trim();
+}
+
+function parseJSON(text) {
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error('No JSON in response');
+  return JSON.parse(match[0]);
+}
+
+async function runAll() {
+  const text = document.getElementById('review-input').value.trim();
+  if (!text) { document.getElementById('status').textContent = 'Please enter a review first.'; return; }
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true;
+  document.getElementById('status').textContent = 'Analyzing + predicting…';
+  document.getElementById('result-area').innerHTML = '';
+
+  try {
+    const prompt = `Analyze this product review for sentiment AND make two predictions. Return ONLY valid JSON.
+
+Review: "${text.slice(0,600)}"
+
+Return exactly:
+{
+  "sentiment": "Positive" or "Neutral" or "Negative",
+  "sentiment_score": integer 1-10,
+  "category": one of ["Quality","Value","Performance","Durability","Shipping","Customer Service","Compatibility","General"],
+  "priority": "High" or "Medium" or "Low",
+  "summary": "one clean sentence under 20 words",
+  "key_issue": "2-4 words",
+  "predicted_stars": number 1-5 with one decimal,
+  "escalation_risk": "High" or "Medium" or "Low",
+  "escalation_probability": integer 0-100,
+  "escalation_reasoning": "one sentence explaining why",
+  "rating_reasoning": "one sentence explaining predicted stars"
+}`;
+
+    const raw = await callClaude(prompt);
+    const r = parseJSON(raw);
+    history.push({ ...r, snippet: text.slice(0,80), ts: new Date().toLocaleTimeString() });
+    updateMetrics();
+    renderFullResult(r);
+    renderHistory();
+    document.getElementById('status').textContent = '';
+  } catch(e) {
+    document.getElementById('status').textContent = 'Error: ' + e.message;
+  }
+  btn.disabled = false;
+}
+
+async function runPredictions() {
+  const text = document.getElementById('pred-input').value.trim();
+  if (!text) { document.getElementById('pred-status').textContent = 'Please enter a review first.'; return; }
+  const btn = document.getElementById('pred-btn');
+  btn.disabled = true;
+  document.getElementById('pred-status').textContent = 'Running predictions…';
+  document.getElementById('pred-result').innerHTML = '';
+
+  try {
+    const prompt = `You are a prediction model. Given this product review, make two predictions. Return ONLY valid JSON.
+
+Review: "${text.slice(0,600)}"
+
+Return exactly:
+{
+  "predicted_stars": number 1-5 with one decimal,
+  "rating_reasoning": "one sentence explaining your star prediction",
+  "escalation_risk": "High" or "Medium" or "Low",
+  "escalation_probability": integer 0-100,
+  "escalation_reasoning": "one sentence explaining escalation likelihood",
+  "churn_signal": "Strong" or "Moderate" or "Weak",
+  "churn_reasoning": "one sentence on whether customer will return"
+}`;
+
+    const raw = await callClaude(prompt);
+    const r = parseJSON(raw);
+    renderPredResult(r);
+    document.getElementById('pred-status').textContent = '';
+  } catch(e) {
+    document.getElementById('pred-status').textContent = 'Error: ' + e.message;
+  }
+  btn.disabled = false;
+}
+
+function starsHTML(n) {
+  const full = Math.round(n);
+  return '★'.repeat(full) + '☆'.repeat(5-full);
+}
+
+function renderFullResult(r) {
+  const scoreColor = r.sentiment_score>=7?'#639922':r.sentiment_score>=5?'#EF9F27':'#E24B4A';
+  const escColor = r.escalation_risk==='High'?'#E24B4A':r.escalation_risk==='Medium'?'#EF9F27':'#639922';
+  const sc = r.sentiment==='Positive'?'badge-pos':r.sentiment==='Negative'?'badge-neg':'badge-neu';
+  const pc = r.priority==='High'?'badge-high':r.priority==='Medium'?'badge-med':'badge-low';
+  const ec = r.escalation_risk==='High'?'badge-escalate':r.escalation_risk==='Low'?'badge-safe':'badge-med';
+
+  document.getElementById('result-area').innerHTML = `
+    <div class="result-card">
+      <div style="margin-bottom:10px;">
+        <span class="badge ${sc}">${r.sentiment}</span>
+        <span class="badge ${pc}">${r.priority} priority</span>
+        <span class="badge badge-cat">${r.category}</span>
+        <span class="badge badge-cat">${r.key_issue||''}</span>
+      </div>
+      <div class="score-row">
+        <span class="score-label">Sentiment score</span>
+        <div class="score-bar-wrap"><div class="score-bar" style="width:${r.sentiment_score*10}%;background:${scoreColor};"></div></div>
+        <span class="score-num">${r.sentiment_score}/10</span>
+      </div>
+      <p class="summary-text">${r.summary}</p>
+      <hr class="section-divider">
+      <div class="pred-grid">
+        <div class="pred-box">
+          <p class="pred-box-title">&#127919; Predicted star rating</p>
+          <div class="pred-big" style="color:#EF9F27;">${r.predicted_stars}</div>
+          <div class="stars">${starsHTML(r.predicted_stars)}</div>
+          <p class="reasoning">${r.rating_reasoning||''}</p>
+        </div>
+        <div class="pred-box">
+          <p class="pred-box-title">&#9888; Escalation risk</p>
+          <div class="pred-big" style="color:${escColor};">${r.escalation_risk}</div>
+          <div class="prob-bar-wrap"><div class="prob-bar" style="width:${r.escalation_probability||0}%;background:${escColor};"></div></div>
+          <p class="prob-label">${r.escalation_probability||0}% probability</p>
+          <p class="reasoning">${r.escalation_reasoning||''}</p>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderPredResult(r) {
+  const escColor = r.escalation_risk==='High'?'#E24B4A':r.escalation_risk==='Medium'?'#EF9F27':'#639922';
+  const churnColor = r.churn_signal==='Strong'?'#E24B4A':r.churn_signal==='Moderate'?'#EF9F27':'#639922';
+
+  document.getElementById('pred-result').innerHTML = `
+    <div class="result-card">
+      <div class="pred-grid">
+        <div class="pred-box">
+          <p class="pred-box-title">&#127919; Predicted star rating</p>
+          <div class="pred-big" style="color:#EF9F27;">${r.predicted_stars}</div>
+          <div class="stars">${starsHTML(r.predicted_stars)}</div>
+          <p class="reasoning">${r.rating_reasoning||''}</p>
+        </div>
+        <div class="pred-box">
+          <p class="pred-box-title">&#9888; Escalation risk</p>
+          <div class="pred-big" style="color:${escColor};">${r.escalation_risk}</div>
+          <div class="prob-bar-wrap"><div class="prob-bar" style="width:${r.escalation_probability||0}%;background:${escColor};"></div></div>
+          <p class="prob-label">${r.escalation_probability||0}% probability</p>
+          <p class="reasoning">${r.escalation_reasoning||''}</p>
+        </div>
+      </div>
+      <div style="margin-top:1rem;">
+        <div class="pred-box">
+          <p class="pred-box-title">&#128683; Churn signal</p>
+          <div class="pred-big" style="color:${churnColor};">${r.churn_signal}</div>
+          <p class="reasoning">${r.churn_reasoning||''}</p>
+        </div>
+      </div>
+    </div>`;
+}
+
+function updateMetrics() {
+  const total = history.length;
+  const avg = total ? (history.reduce((a,b)=>a+b.sentiment_score,0)/total).toFixed(1) : '—';
+  const escalate = history.filter(h=>h.escalation_risk==='High').length;
+  const avgRating = total ? (history.filter(h=>h.predicted_stars).reduce((a,b)=>a+(b.predicted_stars||0),0)/total).toFixed(1) : '—';
+  document.getElementById('m-total').textContent = total;
+  document.getElementById('m-avg').textContent = avg;
+  document.getElementById('m-escalate').textContent = escalate;
+  document.getElementById('m-rating').textContent = avgRating === '—' ? '—' : avgRating + '★';
+}
+
+function renderHistory() {
+  const el = document.getElementById('history-list');
+  if (!history.length) { el.innerHTML = '<p class="empty-state">No reviews yet.</p>'; return; }
+  el.innerHTML = history.slice().reverse().map(h => {
+    const sc = h.sentiment==='Positive'?'badge-pos':h.sentiment==='Negative'?'badge-neg':'badge-neu';
+    const ec = h.escalation_risk==='High'?'badge-escalate':h.escalation_risk==='Low'?'badge-safe':'badge-med';
+    return `<div class="history-row">
+      <span class="history-text">${h.snippet}…</span>
+      <span class="badge ${sc}">${h.sentiment}</span>
+      <span class="badge ${ec}">${h.escalation_risk||'—'} risk</span>
+      <span class="badge badge-stars">${h.predicted_stars||'—'}★</span>
+      <span class="history-time">${h.ts}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderCharts() {
+  if (!history.length) return;
+  const sentCounts={Positive:0,Neutral:0,Negative:0};
+  const escCounts={High:0,Medium:0,Low:0};
+  history.forEach(h => {
+    sentCounts[h.sentiment]=(sentCounts[h.sentiment]||0)+1;
+    if (h.escalation_risk) escCounts[h.escalation_risk]=(escCounts[h.escalation_risk]||0)+1;
+  });
+
+  if (sentChart) sentChart.destroy();
+  sentChart = new Chart(document.getElementById('chart-sentiment'), {
+    type:'doughnut',
+    data:{ labels:['Positive','Neutral','Negative'], datasets:[{data:[sentCounts.Positive,sentCounts.Neutral,sentCounts.Negative],backgroundColor:['#639922','#888780','#E24B4A'],borderWidth:0}] },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:12}}}}}
+  });
+
+  if (escalateChart) escalateChart.destroy();
+  escalateChart = new Chart(document.getElementById('chart-escalate'), {
+    type:'doughnut',
+    data:{ labels:['High','Medium','Low'], datasets:[{data:[escCounts.High,escCounts.Medium,escCounts.Low],backgroundColor:['#E24B4A','#EF9F27','#639922'],borderWidth:0}] },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:12}}}}}
+  });
+
+  const ratingData = history.filter(h=>h.predicted_stars);
+  if (ratingsChart) ratingsChart.destroy();
+  if (ratingData.length) {
+    ratingsChart = new Chart(document.getElementById('chart-ratings'), {
+      type:'bar',
+      data:{
+        labels: ratingData.map((_,i)=>'Review #'+(i+1)),
+        datasets:[
+          {label:'Predicted stars',data:ratingData.map(h=>h.predicted_stars),backgroundColor:'#EF9F27',borderWidth:0,borderRadius:4},
+          {label:'Actual sentiment score',data:ratingData.map(h=>+(h.sentiment_score/2).toFixed(1)),backgroundColor:'#378ADD',borderWidth:0,borderRadius:4}
+        ]
+      },
+      options:{responsive:true,maintainAspectRatio:false,scales:{y:{min:0,max:5,ticks:{stepSize:1}},x:{grid:{display:false}}},plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:12}}}}}
+    });
+  }
+
+  if (scoresChart) scoresChart.destroy();
+  scoresChart = new Chart(document.getElementById('chart-scores'), {
+    type:'line',
+    data:{labels:history.map((_,i)=>'#'+(i+1)),datasets:[{label:'Score',data:history.map(h=>h.sentiment_score),borderColor:'#378ADD',backgroundColor:'rgba(55,138,221,0.08)',tension:0.3,pointRadius:4,fill:true,borderWidth:1.5}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{min:0,max:10,ticks:{stepSize:2}}}}
+  });
+}
+
+function downloadCSV() {
+  if (!history.length) { alert('No data yet.'); return; }
+  const cols=['snippet','sentiment','sentiment_score','category','priority','key_issue','summary','predicted_stars','escalation_risk','escalation_probability','ts'];
+  const rows=[cols.join(','),...history.map(h=>cols.map(c=>`"${String(h[c]||'').replace(/"/g,'""')}"`).join(','))];
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv'})); a.download='sentiment_predictions.csv'; a.click();
+}
+</script>
+</body>
+</html>

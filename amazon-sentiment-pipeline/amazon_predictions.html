@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Review Prediction Engine</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f3; color: #1a1a1a; min-height: 100vh; padding: 2rem; }
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .subtitle { font-size: 14px; color: #666; margin-bottom: 2rem; }
+  .card { background: white; border-radius: 12px; border: 1px solid #e5e5e5; padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
+  .card-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing:.06em; color:#888; margin-bottom:.75rem; }
+  .api-row { display:flex; gap:10px; align-items:center; }
+  input[type="password"], input[type="text"] { flex:1; padding:9px 12px; border:1px solid #ddd; border-radius:8px; font-size:14px; font-family:inherit; }
+  input:focus { outline:none; border-color:#378ADD; }
+  textarea { width:100%; min-height:110px; padding:12px 14px; border:1px solid #ddd; border-radius:8px; font-size:14px; font-family:inherit; resize:vertical; color:#1a1a1a; }
+  textarea:focus { outline:none; border-color:#378ADD; }
+  .btn-row { display:flex; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap; }
+  button { padding:9px 20px; font-size:14px; cursor:pointer; border-radius:8px; border:1px solid #ddd; background:white; color:#1a1a1a; font-family:inherit; transition:background .15s; }
+  button:hover { background:#f5f5f3; }
+  button.primary { background:#1a1a1a; color:white; border-color:#1a1a1a; }
+  button.primary:hover { background:#333; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  .status { font-size:13px; color:#888; }
+  .pred-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1rem; margin-top:1rem; }
+  .pred-box { border:1px solid #eee; border-radius:10px; padding:16px; }
+  .pred-box-title { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:#888; margin-bottom:10px; }
+  .pred-big { font-size:32px; font-weight:700; margin-bottom:4px; }
+  .prob-bar-wrap { height:8px; background:#f1f1ee; border-radius:4px; overflow:hidden; margin:8px 0 4px; }
+  .prob-bar { height:100%; border-radius:4px; transition:width .5s; }
+  .prob-label { font-size:11px; color:#aaa; }
+  .stars { color:#EF9F27; font-size:20px; letter-spacing:2px; margin:4px 0; }
+  .reasoning { font-size:12px; color:#888; margin-top:8px; line-height:1.5; font-style:italic; }
+  .history-row { display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid #f1f1ee; font-size:13px; }
+  .history-row:last-child { border-bottom:none; }
+  .history-text { flex:1; color:#666; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:300px; }
+  .badge { display:inline-block; font-size:11px; font-weight:600; padding:3px 10px; border-radius:20px; }
+  .badge-high { background:#FCEBEB; color:#A32D2D; }
+  .badge-med  { background:#FAEEDA; color:#854F0B; }
+  .badge-low  { background:#EAF3DE; color:#3B6D11; }
+  .badge-stars { background:#FAEEDA; color:#854F0B; }
+  .empty-state { font-size:13px; color:#aaa; padding:1rem 0; }
+  .api-hint { font-size:12px; color:#aaa; margin-top:6px; }
+  .api-hint a { color:#378ADD; text-decoration:none; }
+  .metric-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:1rem; }
+  .metric { background:#f8f8f6; border-radius:8px; padding:14px 16px; }
+  .metric-label { font-size:12px; color:#888; margin-bottom:4px; }
+  .metric-value { font-size:22px; font-weight:600; color:#1a1a1a; }
+</style>
+</head>
+<body>
+
+<h1>Review Prediction Engine</h1>
+<p class="subtitle">Predict escalation risk, star rating, and churn signal from any review text</p>
+
+<div class="card">
+  <p class="card-title">API key</p>
+  <div class="api-row">
+    <input type="password" id="api-key" placeholder="YOUR_ANTHROPIC_API_KEY_HERE..." />
+    <button onclick="toggleKey()">Show</button>
+  </div>
+  <p class="api-hint">Get your key at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> → API Keys.</p>
+</div>
+
+<div class="metric-grid">
+  <div class="metric"><p class="metric-label">Reviews predicted</p><p class="metric-value" id="m-total">0</p></div>
+  <div class="metric"><p class="metric-label">High escalation risk</p><p class="metric-value" id="m-escalate">0</p></div>
+  <div class="metric"><p class="metric-label">Avg predicted rating</p><p class="metric-value" id="m-rating">—</p></div>
+</div>
+
+<div class="card">
+  <p class="card-title">Enter review text</p>
+  <textarea id="review-input" placeholder='Paste any product review here, e.g. "Good service but sound quality was poor"'></textarea>
+  <div class="btn-row">
+    <button class="primary" id="run-btn" onclick="runPredictions()">&#127919; Run Predictions</button>
+    <button onclick="loadSample()">Load sample</button>
+    <span class="status" id="status"></span>
+  </div>
+  <div id="pred-result"></div>
+</div>
+
+<div class="card">
+  <p class="card-title">Prediction history</p>
+  <div id="history-list"><p class="empty-state">No predictions yet — paste a review above to get started.</p></div>
+  <div style="margin-top:1rem;">
+    <button onclick="downloadCSV()">&#8595; Download CSV</button>
+  </div>
+</div>
+
+<script>
+const SAMPLES = [
+  "Good service but sound quality was poor. The headphones look great but bass is weak and tinny. I want a refund.",
+  "Absolutely love this cable! Charges super fast, feels premium. Been using 3 months with zero issues. Highly recommend.",
+  "Stopped working after 2 weeks. Support gave no response. Total waste of money, avoid this product completely.",
+  "Decent for the price. Nothing special but works fine. Build feels a bit cheap but no major complaints."
+];
+let sampleIdx=0, history=[];
+
+function toggleKey() {
+  const inp=document.getElementById('api-key');
+  inp.type=inp.type==='password'?'text':'password';
+}
+
+function loadSample() {
+  document.getElementById('review-input').value=SAMPLES[sampleIdx%SAMPLES.length];
+  sampleIdx++;
+}
+
+function starsHTML(n) {
+  const full=Math.round(n);
+  return '★'.repeat(full)+'☆'.repeat(5-full);
+}
+
+async function runPredictions() {
+  const key=document.getElementById('api-key').value.trim();
+  const text=document.getElementById('review-input').value.trim();
+  if (!key) { document.getElementById('status').textContent='Please enter your API key first.'; return; }
+  if (!text) { document.getElementById('status').textContent='Please enter a review first.'; return; }
+
+  const btn=document.getElementById('run-btn');
+  btn.disabled=true;
+  document.getElementById('status').textContent='Running predictions…';
+  document.getElementById('pred-result').innerHTML='';
+
+  try {
+    const prompt=`You are a prediction model for e-commerce reviews. Given this product review, make three predictions. Return ONLY valid JSON, no other text.
+
+Review: "${text.slice(0,600)}"
+
+Return exactly:
+{
+  "predicted_stars": number 1.0-5.0 with one decimal,
+  "rating_confidence": integer 0-100,
+  "rating_reasoning": "one sentence explaining your star prediction",
+  "escalation_risk": "High" or "Medium" or "Low",
+  "escalation_probability": integer 0-100,
+  "escalation_reasoning": "one sentence explaining escalation likelihood",
+  "churn_signal": "Strong" or "Moderate" or "Weak",
+  "churn_probability": integer 0-100,
+  "churn_reasoning": "one sentence on whether customer will return or buy again"
+}`;
+
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:400,messages:[{role:'user',content:prompt}]})
+    });
+    const data=await resp.json();
+    if (data.error) throw new Error(data.error.message);
+    const raw=data.content[0].text.trim();
+    const match=raw.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('No JSON returned');
+    const r=JSON.parse(match[0]);
+
+    history.push({...r, snippet:text.slice(0,80), ts:new Date().toLocaleTimeString()});
+    updateMetrics();
+    renderResult(r);
+    renderHistory();
+    document.getElementById('status').textContent='';
+  } catch(e) {
+    document.getElementById('status').textContent='Error: '+e.message;
+  }
+  btn.disabled=false;
+}
+
+function renderResult(r) {
+  const escColor=r.escalation_risk==='High'?'#E24B4A':r.escalation_risk==='Medium'?'#EF9F27':'#639922';
+  const churnColor=r.churn_signal==='Strong'?'#E24B4A':r.churn_signal==='Moderate'?'#EF9F27':'#639922';
+
+  document.getElementById('pred-result').innerHTML=`
+    <div class="pred-grid" style="margin-top:1rem;">
+      <div class="pred-box">
+        <p class="pred-box-title">&#127919; Predicted star rating</p>
+        <div class="pred-big" style="color:#EF9F27;">${r.predicted_stars}</div>
+        <div class="stars">${starsHTML(r.predicted_stars)}</div>
+        <div class="prob-bar-wrap"><div class="prob-bar" style="width:${r.rating_confidence||0}%;background:#EF9F27;"></div></div>
+        <p class="prob-label">${r.rating_confidence||0}% confidence</p>
+        <p class="reasoning">${r.rating_reasoning||''}</p>
+      </div>
+      <div class="pred-box">
+        <p class="pred-box-title">&#9888; Escalation risk</p>
+        <div class="pred-big" style="color:${escColor};">${r.escalation_risk}</div>
+        <div class="prob-bar-wrap"><div class="prob-bar" style="width:${r.escalation_probability||0}%;background:${escColor};"></div></div>
+        <p class="prob-label">${r.escalation_probability||0}% probability</p>
+        <p class="reasoning">${r.escalation_reasoning||''}</p>
+      </div>
+      <div class="pred-box">
+        <p class="pred-box-title">&#128683; Churn signal</p>
+        <div class="pred-big" style="color:${churnColor};">${r.churn_signal}</div>
+        <div class="prob-bar-wrap"><div class="prob-bar" style="width:${r.churn_probability||0}%;background:${churnColor};"></div></div>
+        <p class="prob-label">${r.churn_probability||0}% probability</p>
+        <p class="reasoning">${r.churn_reasoning||''}</p>
+      </div>
+    </div>`;
+}
+
+function updateMetrics() {
+  const total=history.length;
+  const escalate=history.filter(h=>h.escalation_risk==='High').length;
+  const avgRating=total?(history.filter(h=>h.predicted_stars).reduce((a,b)=>a+(b.predicted_stars||0),0)/total).toFixed(1):'—';
+  document.getElementById('m-total').textContent=total;
+  document.getElementById('m-escalate').textContent=escalate;
+  document.getElementById('m-rating').textContent=avgRating==='—'?'—':avgRating+'★';
+}
+
+function renderHistory() {
+  const el=document.getElementById('history-list');
+  if (!history.length) { el.innerHTML='<p class="empty-state">No predictions yet.</p>'; return; }
+  el.innerHTML=history.slice().reverse().map(h=>{
+    const ec=h.escalation_risk==='High'?'badge-high':h.escalation_risk==='Medium'?'badge-med':'badge-low';
+    const cc=h.churn_signal==='Strong'?'badge-high':h.churn_signal==='Moderate'?'badge-med':'badge-low';
+    return `<div class="history-row">
+      <span class="history-text">${h.snippet}…</span>
+      <span class="badge ${ec}">${h.escalation_risk} risk</span>
+      <span class="badge ${cc}">${h.churn_signal} churn</span>
+      <span class="badge badge-stars">${h.predicted_stars}★</span>
+      <span style="font-size:12px;color:#aaa;">${h.ts}</span>
+    </div>`;
+  }).join('');
+}
+
+function downloadCSV() {
+  if (!history.length) { alert('No data yet.'); return; }
+  const cols=['snippet','predicted_stars','rating_confidence','escalation_risk','escalation_probability','churn_signal','churn_probability','ts'];
+  const rows=[cols.join(','),...history.map(h=>cols.map(c=>`"${String(h[c]||'').replace(/"/g,'""')}"`).join(','))];
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv'})); a.download='review_predictions.csv'; a.click();
+}
+</script>
+</body>
+</html>
