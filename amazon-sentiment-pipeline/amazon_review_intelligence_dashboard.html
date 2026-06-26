@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Amazon Review Intelligence Dashboard & Sentiment Prediction</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; color: #1a1a1a; min-height: 100vh; padding: 2rem; }
+
+  /* Header */
+  .header { margin-bottom: 2rem; }
+  .header-top { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
+  .header h1 { font-size: 22px; font-weight: 700; color: #1a1a1a; letter-spacing: -.02em; }
+  .header-badge { display: inline-flex; align-items: center; gap: 6px; background: #1a1a1a; color: white; font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 20px; letter-spacing: .04em; margin-top: 6px; }
+  .header-badge .dot { width: 6px; height: 6px; background: #4ade80; border-radius: 50%; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .subtitle { font-size: 14px; color: #666; margin-top: 6px; }
+
+  /* API Key */
+  .api-card { background: white; border-radius: 12px; border: 1px solid #e5e5e5; padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+  .api-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: #888; white-space: nowrap; }
+  .api-input-wrap { display: flex; gap: 8px; flex: 1; min-width: 200px; }
+  input[type="password"], input[type="text"] { flex: 1; padding: 9px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; font-family: inherit; background: #fafafa; }
+  input:focus { outline: none; border-color: #6366f1; background: white; }
+  .api-hint { font-size: 12px; color: #aaa; }
+  .api-hint a { color: #6366f1; text-decoration: none; }
+
+  /* Metrics */
+  .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 1.5rem; }
+  .metric { background: white; border-radius: 12px; border: 1px solid #e5e5e5; padding: 16px 18px; }
+  .metric-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: #999; margin-bottom: 6px; }
+  .metric-value { font-size: 26px; font-weight: 700; color: #1a1a1a; }
+  .metric-sub { font-size: 11px; color: #bbb; margin-top: 3px; }
+  .metric-accent { border-top: 3px solid #6366f1; }
+
+  /* Main card + tabs */
+  .main-card { background: white; border-radius: 14px; border: 1px solid #e5e5e5; padding: 1.5rem; }
+  .tabs { display: flex; border-bottom: 1px solid #eee; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0; }
+  .tab { padding: 9px 20px; font-size: 13px; font-weight: 500; cursor: pointer; color: #999; background: none; border: none; border-bottom: 2px solid transparent; font-family: inherit; transition: all .15s; }
+  .tab:hover { color: #555; }
+  .tab.active { color: #1a1a1a; border-bottom-color: #6366f1; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* Inputs */
+  textarea { width: 100%; min-height: 100px; padding: 12px 14px; border: 1px solid #ddd; border-radius: 10px; font-size: 14px; font-family: inherit; resize: vertical; color: #1a1a1a; background: #fafafa; }
+  textarea:focus { outline: none; border-color: #6366f1; background: white; }
+  .btn-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+  button { padding: 9px 20px; font-size: 14px; cursor: pointer; border-radius: 8px; border: 1px solid #ddd; background: white; color: #1a1a1a; font-family: inherit; transition: all .15s; font-weight: 500; }
+  button:hover { background: #f5f5f5; }
+  button.primary { background: #6366f1; color: white; border-color: #6366f1; }
+  button.primary:hover { background: #4f46e5; }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  .status { font-size: 13px; color: #999; }
+
+  /* Result */
+  .result-card { border: 1px solid #eee; border-radius: 12px; padding: 16px 18px; margin-top: 14px; background: #fafafa; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; margin-right: 6px; margin-bottom: 4px; }
+  .badge-pos { background: #dcfce7; color: #166534; }
+  .badge-neg { background: #fee2e2; color: #991b1b; }
+  .badge-neu { background: #f1f5f9; color: #475569; }
+  .badge-high { background: #fee2e2; color: #991b1b; }
+  .badge-med  { background: #fef3c7; color: #92400e; }
+  .badge-low  { background: #dcfce7; color: #166534; }
+  .badge-cat  { background: #f1f5f9; color: #475569; }
+  .badge-stars { background: #fef3c7; color: #92400e; }
+  .badge-escalate { background: #fee2e2; color: #991b1b; }
+  .badge-safe { background: #dcfce7; color: #166534; }
+  .score-row { display: flex; align-items: center; gap: 12px; margin: 10px 0; }
+  .score-label { font-size: 12px; color: #888; min-width: 110px; }
+  .score-bar-wrap { flex: 1; height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
+  .score-bar { height: 100%; border-radius: 3px; transition: width .5s ease; }
+  .score-num { font-size: 14px; font-weight: 700; min-width: 36px; }
+  .summary-text { font-size: 13px; color: #555; margin-top: 10px; line-height: 1.6; }
+
+  /* Prediction boxes */
+  .pred-grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 1rem; margin-top: 14px; }
+  .pred-grid-2 { display: grid; grid-template-columns: repeat(2,1fr); gap: 1rem; }
+  .pred-box { border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; background: white; }
+  .pred-box-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: #999; margin-bottom: 12px; }
+  .pred-big { font-size: 30px; font-weight: 700; margin-bottom: 4px; }
+  .prob-bar-wrap { height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden; margin: 8px 0 4px; }
+  .prob-bar { height: 100%; border-radius: 4px; transition: width .6s ease; }
+  .prob-label { font-size: 11px; color: #aaa; }
+  .stars { color: #f59e0b; font-size: 18px; letter-spacing: 2px; margin: 4px 0; }
+  .reasoning { font-size: 13px; color: #555; margin-top: 8px; line-height: 1.5; font-style: italic; }
+  .section-divider { border: none; border-top: 1px solid #e5e7eb; margin: 1.25rem 0; }
+
+  /* Charts */
+  .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  .chart-wrap { position: relative; width: 100%; height: 200px; }
+  .chart-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: #999; margin-bottom: .75rem; }
+
+  /* History */
+  .history-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+  .history-row:last-child { border-bottom: none; }
+  .history-text { flex: 1; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px; }
+  .history-time { font-size: 12px; color: #bbb; }
+  .empty-state { font-size: 13px; color: #bbb; padding: 1.5rem 0; text-align: center; }
+
+  /* Product Health */
+  .health-card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; margin-top: 14px; background: white; }
+  .health-status-banner { display: flex; align-items: center; gap: 14px; padding: 16px 20px; border-radius: 10px; margin-bottom: 16px; }
+  .health-status-icon { font-size: 32px; }
+  .health-status-label { font-size: 22px; font-weight: 700; }
+  .health-status-sub { font-size: 13px; margin-top: 2px; opacity: .8; }
+  .health-stable { background: #f0fdf4; border: 1px solid #bbf7d0; }
+  .health-declining { background: #fffbeb; border: 1px solid #fde68a; }
+  .health-atrisk { background: #fef2f2; border: 1px solid #fecaca; }
+  .health-review-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+  .health-review-row:last-child { border-bottom: none; }
+  .health-score-pill { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
+  .health-trend-wrap { position: relative; width: 100%; height: 160px; margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <div>
+      <h1>Amazon Review Intelligence Dashboard & Sentiment Prediction</h1>
+      <p class="subtitle">Unstructured reviews → structured intelligence + predictions, powered by Claude AI</p>
+    </div>
+    <div class="header-badge"><span class="dot"></span> Powered by claude-sonnet-4-6</div>
+  </div>
+</div>
+
+<div class="api-card">
+  <span class="api-label">API Key</span>
+  <div class="api-input-wrap">
+    <input type="password" id="api-key" placeholder="Paste your Anthropic API key here" />
+    <button onclick="toggleKey()">Show</button>
+  </div>
+  <span class="api-hint">Get yours at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> — stays in your browser only.</span>
+</div>
+
+<div class="metric-grid">
+  <div class="metric metric-accent"><p class="metric-label">Reviews analyzed</p><p class="metric-value" id="m-total">0</p></div>
+  <div class="metric"><p class="metric-label">Avg sentiment score</p><p class="metric-value" id="m-avg">—</p><p class="metric-sub">out of 10</p></div>
+  <div class="metric"><p class="metric-label">High escalation risk</p><p class="metric-value" id="m-escalate">0</p><p class="metric-sub">reviews flagged</p></div>
+  <div class="metric"><p class="metric-label">Avg predicted rating</p><p class="metric-value" id="m-rating">—</p><p class="metric-sub">out of 5 stars</p></div>
+</div>
+
+<div class="main-card">
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('analyze')">✦ Analyze review</button>
+    <button class="tab" onclick="switchTab('predict')">⚡ Predictions only</button>
+    <button class="tab" onclick="switchTab('charts')">📊 Charts</button>
+    <button class="tab" onclick="switchTab('health')">🏥 Product Health</button>
+    <button class="tab" onclick="switchTab('history')">🕘 History</button>
+  </div>
+
+  <!-- ANALYZE TAB -->
+  <div class="tab-panel active" id="tab-analyze">
+    <textarea id="review-input" placeholder='Paste any Amazon review here, e.g. "Good service but sound quality was poor. The bass is weak and I want a refund."'></textarea>
+    <div class="btn-row">
+      <button class="primary" id="run-btn" onclick="runAll()">✦ Analyze + Predict</button>
+      <button onclick="loadSample('analyze')">Load sample review</button>
+      <span class="status" id="status"></span>
+    </div>
+    <div id="result-area"></div>
+  </div>
+
+  <!-- PREDICTIONS ONLY TAB -->
+  <div class="tab-panel" id="tab-predict">
+    <textarea id="pred-input" placeholder='Paste a review to get escalation risk, predicted star rating, and churn signal instantly.'></textarea>
+    <div class="btn-row">
+      <button class="primary" id="pred-btn" onclick="runPredictions()">⚡ Run Predictions</button>
+      <button onclick="loadSample('predict')">Load sample review</button>
+      <span class="status" id="pred-status"></span>
+    </div>
+    <div id="pred-result"></div>
+  </div>
+
+  <!-- CHARTS TAB -->
+  <div class="tab-panel" id="tab-charts">
+    <div class="chart-grid">
+      <div>
+        <p class="chart-label">Sentiment distribution</p>
+        <div class="chart-wrap"><canvas id="chart-sentiment" role="img" aria-label="Sentiment donut chart">No data yet.</canvas></div>
+      </div>
+      <div>
+        <p class="chart-label">Escalation risk distribution</p>
+        <div class="chart-wrap"><canvas id="chart-escalate" role="img" aria-label="Escalation risk donut chart">No data yet.</canvas></div>
+      </div>
+    </div>
+    <div style="margin-top:1.5rem;">
+      <p class="chart-label">Predicted vs sentiment score (scaled to 5★)</p>
+      <div style="position:relative;width:100%;height:200px;"><canvas id="chart-ratings" role="img" aria-label="Rating comparison bar chart">No data yet.</canvas></div>
+    </div>
+    <div style="margin-top:1.5rem;">
+      <p class="chart-label">Sentiment scores over time</p>
+      <div style="position:relative;width:100%;height:180px;"><canvas id="chart-scores" role="img" aria-label="Score line chart">No data yet.</canvas></div>
+    </div>
+  </div>
+
+  <!-- PRODUCT HEALTH TAB -->
+  <div class="tab-panel" id="tab-health">
+    <div style="margin-bottom:1rem;">
+      <p style="font-size:13px;color:#666;line-height:1.6;">Enter a <strong>product name</strong> and at least <strong>2 separate customer reviews</strong> below — one review per line, each from a different customer. Claude will track sentiment across all reviews and flag if the product is <span style="color:#22c55e;font-weight:600;">Stable</span>, <span style="color:#f59e0b;font-weight:600;">Declining</span>, or <span style="color:#ef4444;font-weight:600;">At Risk</span>.</p>
+      <p style="font-size:12px;color:#f59e0b;margin-top:6px;font-weight:600;">⚠ Each line must be a separate customer review — not one review split across multiple lines.</p>
+    </div>
+    <input type="text" id="health-product" placeholder="Product name, e.g. Anker USB-C Cable" style="width:100%;margin-bottom:10px;" />
+    <textarea id="health-input" style="min-height:130px;" placeholder="Paste one SEPARATE customer review per line, e.g.&#10;&#10;Review 1: Great cable, charges fast and still going strong after 3 months.&#10;Review 2: Started fraying at the connector after just 6 weeks of use.&#10;Review 3: Stopped charging completely after 2 months. Want a refund.&#10;&#10;⚠ Do not split one review across multiple lines."></textarea>
+    <div class="btn-row">
+      <button class="primary" id="health-btn" onclick="runHealthCheck()">🏥 Analyze Product Health</button>
+      <button onclick="loadHealthSample()">Load sample</button>
+      <span class="status" id="health-status"></span>
+    </div>
+    <div id="health-result"></div>
+  </div>
+
+  <!-- HISTORY TAB -->
+  <div class="tab-panel" id="tab-history">
+    <div id="history-list"><p class="empty-state">No reviews analyzed yet — start on the Analyze tab.</p></div>
+    <div style="margin-top:1rem;">
+      <button onclick="downloadCSV()">↓ Download CSV</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SAMPLES = [
+  "Good service but sound quality was poor. The headphones look great but bass is weak and vocals sound tinny. Returned after one week.",
+  "Absolutely love this cable! Charges super fast and feels very premium. Been using it 3 months with zero issues. Highly recommend.",
+  "Stopped working after 2 weeks. Contacted support and got no response. Total waste of money. I want a refund immediately.",
+  "Decent for the price. Nothing special but gets the job done. Build quality feels a bit cheap but works fine so far."
+];
+let sampleIdx = 0, predSampleIdx = 0, history = [];
+let sentChart, escalateChart, ratingsChart, scoresChart;
+
+function toggleKey() {
+  const inp = document.getElementById('api-key');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+
+function getKey() { return document.getElementById('api-key').value.trim(); }
+
+function switchTab(name) {
+  const names = ['analyze','predict','charts','health','history'];
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', names[i]===name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id==='tab-'+name));
+  if (name==='charts') renderCharts();
+}
+
+function loadSample(tab) {
+  if (tab === 'analyze') {
+    document.getElementById('review-input').value = SAMPLES[sampleIdx % SAMPLES.length];
+    sampleIdx++;
+  } else {
+    document.getElementById('pred-input').value = SAMPLES[predSampleIdx % SAMPLES.length];
+    predSampleIdx++;
+  }
+}
+
+async function callClaude(prompt, maxTokens=600) {
+  const key = getKey();
+  if (!key) throw new Error('Please enter your API key first.');
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] })
+  });
+  const data = await resp.json();
+  if (data.error) throw new Error(data.error.message);
+  return data.content[0].text.trim();
+}
+
+function parseJSON(text) {
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error('No JSON in response');
+  return JSON.parse(match[0]);
+}
+
+function starsHTML(n) {
+  const full = Math.round(n);
+  return '★'.repeat(full) + '☆'.repeat(5-full);
+}
+
+// ── ANALYZE + PREDICT ──
+async function runAll() {
+  const text = document.getElementById('review-input').value.trim();
+  if (!text) { document.getElementById('status').textContent = 'Please enter a review first.'; return; }
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true;
+  document.getElementById('status').textContent = 'Analyzing + predicting…';
+  document.getElementById('result-area').innerHTML = '';
+
+  try {
+    const prompt = `Analyze this product review for sentiment AND make three predictions. Return ONLY valid JSON, no other text.
+
+Review: "${text.slice(0,600)}"
+
+Return exactly:
+{
+  "sentiment": "Positive" or "Neutral" or "Negative",
+  "sentiment_score": integer 1-10,
+  "category": one of ["Quality","Value","Performance","Durability","Shipping","Customer Service","Compatibility","General"],
+  "priority": "High" or "Medium" or "Low",
+  "summary": "one clean sentence under 20 words",
+  "key_issue": "2-4 words",
+  "predicted_stars": number 1-5 with one decimal,
+  "rating_confidence": integer 0-100,
+  "rating_reasoning": "one sentence explaining predicted stars",
+  "escalation_risk": "High" or "Medium" or "Low",
+  "escalation_probability": integer 0-100,
+  "escalation_reasoning": "one sentence explaining why",
+  "churn_signal": "Strong" or "Moderate" or "Weak",
+  "churn_probability": integer 0-100,
+  "churn_reasoning": "one sentence on whether customer will return"
+}`;
+
+    const raw = await callClaude(prompt);
+    const r = parseJSON(raw);
+    history.push({ ...r, snippet: text.slice(0,80), ts: new Date().toLocaleTimeString() });
+    updateMetrics();
+    renderFullResult(r);
+    renderHistory();
+    document.getElementById('status').textContent = '';
+  } catch(e) {
+    document.getElementById('status').textContent = 'Error: ' + e.message;
+  }
+  btn.disabled = false;
+}
+
+// ── PREDICTIONS ONLY ──
+async function runPredictions() {
+  const text = document.getElementById('pred-input').value.trim();
+  if (!text) { document.getElementById('pred-status').textContent = 'Please enter a review first.'; return; }
+  const btn = document.getElementById('pred-btn');
+  btn.disabled = true;
+  document.getElementById('pred-status').textContent = 'Running predictions…';
+  document.getElementById('pred-result').innerHTML = '';
+
+  try {
+    const prompt = `You are a prediction model for e-commerce reviews. Return ONLY valid JSON, no other text.
+
+Review: "${text.slice(0,600)}"
+
+Return exactly:
+{
+  "predicted_stars": number 1-5 with one decimal,
+  "rating_confidence": integer 0-100,
+  "rating_reasoning": "one sentence explaining your star prediction",
+  "escalation_risk": "High" or "Medium" or "Low",
+  "escalation_probability": integer 0-100,
+  "escalation_reasoning": "one sentence explaining escalation likelihood",
+  "churn_signal": "Strong" or "Moderate" or "Weak",
+  "churn_probability": integer 0-100,
+  "churn_reasoning": "one sentence on whether customer will return or buy again"
+}`;
+
+    const raw = await callClaude(prompt, 400);
+    const r = parseJSON(raw);
+    renderPredResult(r);
+    document.getElementById('pred-status').textContent = '';
+  } catch(e) {
+    document.getElementById('pred-status').textContent = 'Error: ' + e.message;
+  }
+  btn.disabled = false;
+}
+
+// ── RENDER FULL RESULT ──
+function renderFullResult(r) {
+  const scoreColor = r.sentiment_score>=7?'#22c55e':r.sentiment_score>=5?'#f59e0b':'#ef4444';
+  const escColor   = r.escalation_risk==='High'?'#ef4444':r.escalation_risk==='Medium'?'#f59e0b':'#22c55e';
+  const churnColor = r.churn_signal==='Strong'?'#ef4444':r.churn_signal==='Moderate'?'#f59e0b':'#22c55e';
+  const sc = r.sentiment==='Positive'?'badge-pos':r.sentiment==='Negative'?'badge-neg':'badge-neu';
+  const pc = r.priority==='High'?'badge-high':r.priority==='Medium'?'badge-med':'badge-low';
+
+  document.getElementById('result-area').innerHTML = `
+    <div class="result-card">
+      <div style="margin-bottom:12px;">
+        <span class="badge ${sc}">${r.sentiment}</span>
+        <span class="badge ${pc}">${r.priority} priority</span>
+        <span class="badge badge-cat">${r.category}</span>
+        <span class="badge badge-cat">${r.key_issue||''}</span>
+      </div>
+      <div class="score-row">
+        <span class="score-label">Sentiment score</span>
+        <div class="score-bar-wrap"><div class="score-bar" style="width:${r.sentiment_score*10}%;background:${scoreColor};"></div></div>
+        <span class="score-num" style="color:${scoreColor};">${r.sentiment_score}/10</span>
+      </div>
+      <p class="summary-text">${r.summary}</p>
+      <hr class="section-divider">
+      <p style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#999;margin-bottom:12px;">Predictions</p>
+      <div class="pred-grid-3">
+        <div class="pred-box">
+          <p class="pred-box-title">⭐ Predicted rating</p>
+          <div class="pred-big" style="color:#f59e0b;">${r.predicted_stars}</div>
+          <div class="stars">${starsHTML(r.predicted_stars)}</div>
+          <div class="prob-bar-wrap"><div class="prob-bar" style="width:${r.rating_confidence||0}%;background:#f59e0b;"></div></div>
+          <p class="prob-label">${r.rating_confidence||0}% confidence</p>
+          <p class="reasoning">${r.rating_reasoning||''}</p>
+        </div>
+        <div class="pred-box">
+          <p class="pred-box-title">⚠ Escalation risk</p>
+          <div class="pred-big" style="color:${escColor};">${r.escalation_risk}</div>
+          <div class="prob-bar-wrap"><div class="prob-bar" style="width:${r.escalation_probability||0}%;background:${escColor};"></div></div>
+          <p class="prob-label">${r.escalation_probability||0}% probability</p>
+          <p class="reasoning">${r.escalation_reasoning||''}</p>
+        </div>
+        <div class="pred-box">
+          <p class="pred-box-title">🚫 Churn signal</p>
+          <div class="pred-big" style="color:${churnColor};">${r.churn_signal}</div>
+          <div class="prob-bar-wrap"><div class="prob-bar" style="width:${r.churn_probability||0}%;background:${churnColor};"></div></div>
+          <p class="prob-label">${r.churn_probability||0}% probability</p>
+          <p class="reasoning">${r.churn_reasoning||''}</p>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── RENDER PREDICTIONS ONLY ──
+function renderPredResult(r) {
+  const escColor   = r.escalation_risk==='High'?'#ef4444':r.escalation_risk==='Medium'?'#f59e0b':'#22c55e';
+  const churnColor = r.churn_signal==='Strong'?'#ef4444':r.churn_signal==='Moderate'?'#f59e0b':'#22c55e';
+
+  document.getElementById('pred-result').innerHTML = `
+    <div class="result-card">
+      <div class="pred-grid-3">
+        <div class="pred-box">
+          <p class="pred-box-title">⭐ Predicted rating</p>
+          <div class="pred-big" style="color:#f59e0b;">${r.predicted_stars}</div>
+          <div class="stars">${starsHTML(r.predicted_stars)}</div>
+          <div class="prob-bar-wrap"><div class="prob-bar" style="width:${r.rating_confidence||0}%;background:#f59e0b;"></div></div>
+          <p class="prob-label">${r.rating_confidence||0}% confidence</p>
+          <p class="reasoning">${r.rating_reasoning||''}</p>
+        </div>
+        <div class="pred-box">
+          <p class="pred-box-title">⚠ Escalation risk</p>
+          <div class="pred-big" style="color:${escColor};">${r.escalation_risk}</div>
+          <div class="prob-bar-wrap"><div class="prob-bar" style="width:${r.escalation_probability||0}%;background:${escColor};"></div></div>
+          <p class="prob-label">${r.escalation_probability||0}% probability</p>
+          <p class="reasoning">${r.escalation_reasoning||''}</p>
+        </div>
+        <div class="pred-box">
+          <p class="pred-box-title">🚫 Churn signal</p>
+          <div class="pred-big" style="color:${churnColor};">${r.churn_signal}</div>
+          <div class="prob-bar-wrap"><div class="prob-bar" style="width:${r.churn_probability||0}%;background:${churnColor};"></div></div>
+          <p class="prob-label">${r.churn_probability||0}% probability</p>
+          <p class="reasoning">${r.churn_reasoning||''}</p>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── METRICS ──
+function updateMetrics() {
+  const total = history.length;
+  const avg = total ? (history.reduce((a,b)=>a+b.sentiment_score,0)/total).toFixed(1) : '—';
+  const escalate = history.filter(h=>h.escalation_risk==='High').length;
+  const avgRating = total ? (history.filter(h=>h.predicted_stars).reduce((a,b)=>a+(b.predicted_stars||0),0)/total).toFixed(1) : '—';
+  document.getElementById('m-total').textContent = total;
+  document.getElementById('m-avg').textContent = avg;
+  document.getElementById('m-escalate').textContent = escalate;
+  document.getElementById('m-rating').textContent = avgRating === '—' ? '—' : avgRating + '★';
+}
+
+// ── HISTORY ──
+function renderHistory() {
+  const el = document.getElementById('history-list');
+  if (!history.length) { el.innerHTML = '<p class="empty-state">No reviews analyzed yet.</p>'; return; }
+  el.innerHTML = history.slice().reverse().map(h => {
+    const sc = h.sentiment==='Positive'?'badge-pos':h.sentiment==='Negative'?'badge-neg':'badge-neu';
+    const ec = h.escalation_risk==='High'?'badge-escalate':h.escalation_risk==='Low'?'badge-safe':'badge-med';
+    const cc = h.churn_signal==='Strong'?'badge-high':h.churn_signal==='Moderate'?'badge-med':'badge-low';
+    return `<div class="history-row">
+      <span class="history-text">${h.snippet}…</span>
+      <span class="badge ${sc}">${h.sentiment}</span>
+      <span class="badge ${ec}">${h.escalation_risk||'—'} risk</span>
+      <span class="badge ${cc}">${h.churn_signal||'—'} churn</span>
+      <span class="badge badge-stars">${h.predicted_stars||'—'}★</span>
+      <span class="history-time">${h.ts}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── CHARTS ──
+function renderCharts() {
+  if (!history.length) return;
+  const sentCounts={Positive:0,Neutral:0,Negative:0};
+  const escCounts={High:0,Medium:0,Low:0};
+  history.forEach(h => {
+    sentCounts[h.sentiment]=(sentCounts[h.sentiment]||0)+1;
+    if (h.escalation_risk) escCounts[h.escalation_risk]=(escCounts[h.escalation_risk]||0)+1;
+  });
+
+  if (sentChart) sentChart.destroy();
+  sentChart = new Chart(document.getElementById('chart-sentiment'), {
+    type:'doughnut',
+    data:{ labels:['Positive','Neutral','Negative'], datasets:[{data:[sentCounts.Positive,sentCounts.Neutral,sentCounts.Negative],backgroundColor:['#22c55e','#94a3b8','#ef4444'],borderWidth:0}] },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:12}}}}}
+  });
+
+  if (escalateChart) escalateChart.destroy();
+  escalateChart = new Chart(document.getElementById('chart-escalate'), {
+    type:'doughnut',
+    data:{ labels:['High','Medium','Low'], datasets:[{data:[escCounts.High,escCounts.Medium,escCounts.Low],backgroundColor:['#ef4444','#f59e0b','#22c55e'],borderWidth:0}] },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:12}}}}}
+  });
+
+  const ratingData = history.filter(h=>h.predicted_stars);
+  if (ratingsChart) ratingsChart.destroy();
+  if (ratingData.length) {
+    ratingsChart = new Chart(document.getElementById('chart-ratings'), {
+      type:'bar',
+      data:{
+        labels: ratingData.map((_,i)=>'Review #'+(i+1)),
+        datasets:[
+          {label:'Predicted stars',data:ratingData.map(h=>h.predicted_stars),backgroundColor:'#f59e0b',borderWidth:0,borderRadius:4},
+          {label:'Sentiment score (÷2)',data:ratingData.map(h=>+(h.sentiment_score/2).toFixed(1)),backgroundColor:'#6366f1',borderWidth:0,borderRadius:4}
+        ]
+      },
+      options:{responsive:true,maintainAspectRatio:false,scales:{y:{min:0,max:5,ticks:{stepSize:1}},x:{grid:{display:false}}},plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:12}}}}}
+    });
+  }
+
+  if (scoresChart) scoresChart.destroy();
+  scoresChart = new Chart(document.getElementById('chart-scores'), {
+    type:'line',
+    data:{labels:history.map((_,i)=>'#'+(i+1)),datasets:[{label:'Score',data:history.map(h=>h.sentiment_score),borderColor:'#6366f1',backgroundColor:'rgba(99,102,241,0.08)',tension:0.3,pointRadius:4,fill:true,borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{min:0,max:10,ticks:{stepSize:2}}}}
+  });
+}
+
+// ── PRODUCT HEALTH ──
+let healthChart;
+
+function loadHealthSample() {
+  document.getElementById('health-product').value = 'Anker USB-C Charging Cable';
+  document.getElementById('health-input').value = [
+    "Great cable, charges super fast and still going strong after 3 months.",
+    "Works fine for basic charging, nothing special but no complaints.",
+    "Started fraying at the connector after just 6 weeks of normal use.",
+    "Stopped charging completely after 2 months. Very disappointed.",
+    "Absolute waste of money. Broke after one week. Avoid this product."
+  ].join('\n');
+}
+
+async function runHealthCheck() {
+  const product = document.getElementById('health-product').value.trim();
+  const raw = document.getElementById('health-input').value.trim();
+  if (!product) { document.getElementById('health-status').textContent = 'Please enter a product name.'; return; }
+  if (!raw) { document.getElementById('health-status').textContent = 'Please enter at least one review.'; return; }
+
+  const reviews = raw.split('\n').map(r=>r.trim()).filter(r=>r.length>5);
+  if (reviews.length < 2) { document.getElementById('health-status').textContent = 'Please enter at least 2 reviews.'; return; }
+
+  const btn = document.getElementById('health-btn');
+  btn.disabled = true;
+  document.getElementById('health-status').textContent = `Analyzing ${reviews.length} reviews…`;
+  document.getElementById('health-result').innerHTML = '';
+
+  const prompt = `You are a product health analyst. Analyze these ${reviews.length} reviews for the product "${product}" and determine if sentiment is stable, declining, or at risk.
+
+Reviews (in order from oldest to newest):
+${reviews.map((r,i) => `${i+1}. ${r.slice(0,200)}`).join('\n')}
+
+Return ONLY valid JSON:
+{
+  "overall_status": "Stable" or "Declining" or "At Risk",
+  "status_reasoning": "one sentence explaining the overall health",
+  "avg_sentiment_score": number 1-10,
+  "trend": "Improving" or "Stable" or "Worsening",
+  "top_issue": "the main recurring problem in 3-5 words or 'None' if healthy",
+  "recommendation": "one actionable sentence for the product team",
+  "review_scores": [array of integers 1-10, one per review in order]
+}`;
+
+  try {
+    const raw_resp = await callClaude(prompt, 500);
+    const r = parseJSON(raw_resp);
+    renderHealthResult(product, reviews, r);
+    document.getElementById('health-status').textContent = '';
+  } catch(e) {
+    document.getElementById('health-status').textContent = 'Error: ' + e.message;
+  }
+  btn.disabled = false;
+}
+
+function renderHealthResult(product, reviews, r) {
+  const statusClass = r.overall_status==='Stable'?'health-stable':r.overall_status==='Declining'?'health-declining':'health-atrisk';
+  const statusColor = r.overall_status==='Stable'?'#166534':r.overall_status==='Declining'?'#92400e':'#991b1b';
+  const statusIcon  = r.overall_status==='Stable'?'✅':r.overall_status==='Declining'?'⚠️':'🚨';
+  const trendArrow  = r.trend==='Improving'?'↑ Improving':r.trend==='Worsening'?'↓ Worsening':'→ Stable';
+  const trendColor  = r.trend==='Improving'?'#166534':r.trend==='Worsening'?'#991b1b':'#475569';
+
+  const scores = r.review_scores || reviews.map(()=>5);
+
+  const reviewRows = reviews.map((rev, i) => {
+    const score = scores[i] || 5;
+    const bg = score>=7?'#dcfce7':score>=5?'#fef3c7':'#fee2e2';
+    const col = score>=7?'#166534':score>=5?'#92400e':'#991b1b';
+    return `<div class="health-review-row">
+      <span class="health-score-pill" style="background:${bg};color:${col};">${score}/10</span>
+      <span style="color:#555;line-height:1.5;">${rev.slice(0,120)}${rev.length>120?'…':''}</span>
+    </div>`;
+  }).join('');
+
+  document.getElementById('health-result').innerHTML = `
+    <div class="health-card">
+      <div class="health-status-banner ${statusClass}">
+        <span class="health-status-icon">${statusIcon}</span>
+        <div>
+          <div class="health-status-label" style="color:${statusColor};">${product} — ${r.overall_status}</div>
+          <div class="health-status-sub" style="color:${statusColor};">${r.status_reasoning}</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;">
+        <div class="pred-box" style="text-align:center;">
+          <p class="pred-box-title">Avg sentiment</p>
+          <div class="pred-big" style="color:#6366f1;">${r.avg_sentiment_score}/10</div>
+        </div>
+        <div class="pred-box" style="text-align:center;">
+          <p class="pred-box-title">Trend</p>
+          <div style="font-size:18px;font-weight:700;margin-top:6px;color:${trendColor};">${trendArrow}</div>
+        </div>
+        <div class="pred-box" style="text-align:center;">
+          <p class="pred-box-title">Top issue</p>
+          <div style="font-size:14px;font-weight:600;margin-top:8px;color:#555;">${r.top_issue}</div>
+        </div>
+      </div>
+      <div style="background:#f8fafc;border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:13px;color:#475569;">
+        <strong style="color:#1a1a1a;">💡 Recommendation:</strong> ${r.recommendation}
+      </div>
+      <p class="chart-label" style="margin-bottom:8px;">Sentiment trend across reviews</p>
+      <div class="health-trend-wrap"><canvas id="chart-health-trend" role="img" aria-label="Product sentiment trend chart"></canvas></div>
+      <p class="chart-label" style="margin:1rem 0 8px;">Review breakdown</p>
+      ${reviewRows}
+    </div>`;
+
+  // Render trend chart
+  if (healthChart) healthChart.destroy();
+  const ctx = document.getElementById('chart-health-trend');
+  if (ctx) {
+    healthChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: scores.map((_,i) => 'Review '+(i+1)),
+        datasets: [{
+          label: 'Sentiment score',
+          data: scores,
+          borderColor: r.trend==='Worsening'?'#ef4444':r.trend==='Improving'?'#22c55e':'#6366f1',
+          backgroundColor: r.trend==='Worsening'?'rgba(239,68,68,0.08)':r.trend==='Improving'?'rgba(34,197,94,0.08)':'rgba(99,102,241,0.08)',
+          tension: 0.3, pointRadius: 5, fill: true, borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { min: 0, max: 10, ticks: { stepSize: 2 } }, x: { grid: { display: false } } }
+      }
+    });
+  }
+}
+
+// ── CSV ──
+function downloadCSV() {
+  if (!history.length) { alert('No data yet.'); return; }
+  const cols=['snippet','sentiment','sentiment_score','category','priority','key_issue','summary','predicted_stars','rating_confidence','escalation_risk','escalation_probability','churn_signal','churn_probability','ts'];
+  const rows=[cols.join(','),...history.map(h=>cols.map(c=>`"${String(h[c]||'').replace(/"/g,'""')}"`).join(','))];
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv'})); a.download='review_intelligence.csv'; a.click();
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+# Environment variables - NEVER upload these
+.env
+.env.local
+.env.production
+
+# API key files
+*.key
+secrets.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+env/
+
+# Data files with potentially sensitive info
+*.csv
+!amazon_sentiment_analysis.csv
