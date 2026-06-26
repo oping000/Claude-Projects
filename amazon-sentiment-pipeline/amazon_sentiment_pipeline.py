@@ -1,3 +1,15 @@
+# =============================================================================
+# Amazon Review Intelligence Dashboard & Sentiment Prediction Pipeline
+# =============================================================================
+# Copyright (c) 2025 oping000 (ODell)
+# GitHub: https://github.com/oping000/Claude-Projects
+#
+# Licensed under Creative Commons Attribution-NonCommercial 4.0 (CC BY-NC 4.0)
+# You may share and adapt this code for NON-COMMERCIAL purposes only.
+# Commercial use requires explicit written permission from the author.
+# Full license: https://creativecommons.org/licenses/by-nc/4.0/
+# =============================================================================
+
 """
 Amazon Review Sentiment & Prediction Pipeline
 ==============================================
